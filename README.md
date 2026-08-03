@@ -131,7 +131,7 @@ Example precise-location entry:
 
 - PHP 8.0 or newer
 - PHP cURL extension
-- A web server such as Apache or Nginx
+- A PHP-capable web server such as Apache, Nginx with PHP-FPM, or PHP's built-in development server
 - An ipstack access key
 - HTTPS for browser geolocation
 - Write permission for the configured log file
@@ -261,6 +261,164 @@ Expected output:
 No syntax errors detected in public_html/visitor/index.php
 ```
 
+## Local development
+
+PHP must execute the file. Opening `index.php` directly in a browser or serving it with a static-file server will expose the PHP source instead of running it.
+
+Do **not** use any of these for this project:
+
+```bash
+python3 -m http.server
+```
+
+- VS Code Live Server
+- A file URL such as `file:///.../index.php`
+- Any other server that only serves static files
+
+### Option A: PHP built-in server
+
+Install PHP and the cURL extension on Debian or Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install php php-curl
+```
+
+From the project directory, start the development server:
+
+```bash
+php -S 127.0.0.1:8000
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/index.php
+```
+
+You can also use:
+
+```text
+http://localhost:8000/index.php
+```
+
+### Option B: Local Apache
+
+Install Apache with PHP support:
+
+```bash
+sudo apt update
+sudo apt install apache2 php libapache2-mod-php php-curl
+sudo systemctl restart apache2
+```
+
+Copy the project into Apache's document root:
+
+```bash
+sudo mkdir -p /var/www/html/visitor
+sudo cp index.php /var/www/html/visitor/index.php
+```
+
+Then open:
+
+```text
+http://localhost/visitor/
+```
+
+Confirm PHP execution with a minimal test:
+
+```bash
+echo '<?php echo "PHP works"; ?>' | sudo tee /var/www/html/php-test.php
+```
+
+Opening `http://localhost/php-test.php` should display only:
+
+```text
+PHP works
+```
+
+Delete the test afterward:
+
+```bash
+sudo rm /var/www/html/php-test.php
+```
+
+### Local configuration layout
+
+The production code expects this configuration path:
+
+```php
+$configFile = dirname(__DIR__, 2) . '/private/visitor-config.php';
+```
+
+For a simple local test, you may temporarily change it to:
+
+```php
+$configFile = __DIR__ . '/visitor-config.php';
+```
+
+Then use this local structure:
+
+```text
+visitor-information-dashboard/
+├── index.php
+├── visitor-config.php
+└── visitor-dashboard.jsonl
+```
+
+Create `visitor-config.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+return [
+    'ipstack_key' => 'YOUR_IPSTACK_ACCESS_KEY',
+    'log_file' => __DIR__ . '/visitor-dashboard.jsonl',
+];
+```
+
+Create the local log file:
+
+```bash
+touch visitor-dashboard.jsonl
+chmod 664 visitor-dashboard.jsonl
+```
+
+Do not commit the local config or log file. Do not use this public-directory config layout unchanged in production.
+
+### Expected localhost IP behavior
+
+On localhost, PHP normally detects one of these addresses:
+
+```text
+127.0.0.1
+::1
+192.168.x.x
+10.x.x.x
+```
+
+These addresses are private or reserved, so ipstack cannot geolocate them. The following message is expected during local development:
+
+```text
+Location lookup is unavailable for a private or reserved IP.
+```
+
+This does not indicate a PHP error. The browser-information panel and permission-based browser geolocation can still work.
+
+Browsers generally treat `http://localhost` and `http://127.0.0.1` as secure local-development contexts, so the location permission request may work locally even without HTTPS.
+
+To test only the ipstack display with a public address, you may temporarily add this immediately after `$visitorIp = getVisitorIp();`:
+
+```php
+if ($visitorIp === '127.0.0.1' || $visitorIp === '::1') {
+    $visitorIp = '94.154.43.220';
+}
+```
+
+Remove this override before deployment. Otherwise, every local request will be logged as the test IP.
+
 ## Configuration alternatives
 
 If your host does not permit files outside `public_html`, use a protected private directory:
@@ -387,6 +545,36 @@ A normal website cannot read a phone's SMS inbox. Browser JavaScript does not ha
 Some browsers support limited OTP-assisted APIs, such as WebOTP, for receiving a one-time verification code after user interaction and consent. That is not equivalent to reading SMS history, and it is not implemented in this project.
 
 ## Troubleshooting
+
+### The browser displays PHP source code
+
+If the browser shows text beginning with PHP statements such as `function`, `$configFile`, or `curl_init()`, PHP is not being executed. The file is being served as plain text.
+
+Check the following:
+
+1. The file is named `index.php`, not `index.html` or `index.php.txt`.
+2. You are not using VS Code Live Server, `python3 -m http.server`, or a `file://` URL.
+3. PHP is installed:
+
+   ```bash
+   php -v
+   ```
+
+4. Use PHP's development server:
+
+   ```bash
+   php -S 127.0.0.1:8000
+   ```
+
+5. When using Apache, install and enable PHP support, then restart Apache.
+
+Serving raw PHP source is a security risk because it can expose application logic, file paths, and secrets. Stop the static server immediately and correct the PHP configuration.
+
+### `Location lookup is unavailable for a private or reserved IP.`
+
+This is expected on localhost and private networks. ipstack requires a public IP address and cannot geolocate `127.0.0.1`, `::1`, or private LAN addresses.
+
+Deploy the page publicly to test the real visitor IP, or use the temporary local test-IP override described in the **Local development** section.
 
 ### `Server configuration is unavailable.`
 
