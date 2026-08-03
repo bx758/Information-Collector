@@ -193,7 +193,7 @@ that resolves to:
 ### 1. Clone or upload the project
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+git clone https://github.com/bx758/Information-Collector.git
 ```
 
 Copy or place `index.php` in your public web directory, for example:
